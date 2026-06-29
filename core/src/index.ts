@@ -1,7 +1,4 @@
-import { v4 as uuid4 } from "uuid";
-
 import { AABB, isIntersectionLineAABB, Line } from "./shapes.js";
-import { which } from "bun";
 
 export * from "./math.js";
 export { AABB, type Line } from "./shapes.js"
@@ -23,8 +20,9 @@ const enum HandleFlags {
   Finished = FinishedUp | FinishedDown | FinishedLeft | FinishedRight,
 }
 
+export type RegionId = Handle;
+
 type Handle = {
-  id: string;
   base: AABB;
   extended: AABB;
   flags: number;
@@ -48,9 +46,6 @@ class IterationLimitReachedError extends Error {
 export class Navigation {
 
   private handles = new Set<Handle>();
-  private handlesById = new Map<string, Handle>();
-
-  public focus: Handle | null = null;
 
   public constructor(
     public width: number,
@@ -63,12 +58,10 @@ export class Navigation {
     return this.handles;
   }
 
-  public add(region: AABB): string {
-    const id = uuid4();
+  public add(box: AABB): RegionId {
     const handle: Handle = {
-      id,
-      base: region,
-      extended: region.deepClone(),
+      base: box,
+      extended: box.deepClone(),
       flags: 0,
       left: [],
       right: [],
@@ -76,16 +69,28 @@ export class Navigation {
       bottom: [],
     }
     this.handles.add(handle);
-    this.handlesById.set(id, handle);
-    return id;
+    return handle;
   }
 
-  public getOutline(id: string) {
-    return this.handlesById.get(id)!.extended;
+  public getAABB(id: RegionId): AABB {
+    return (id as Handle).base;
   }
 
-  public layout(): void {
+  public remove(id: RegionId): void {
+    this.handles.delete(id as Handle);
+    // TODO reset lastFocusLeft etc of neighbours?
+  }
 
+  /**
+   * @deprecated
+   */
+  public getExtendedOutline(id: RegionId) {
+    return (id as Handle).extended;
+  }
+
+  public update(): void {
+
+    // Reset the handles
     for (const handle of this.getHandles()) {
       handle.extended = handle.base.deepClone();
       handle.flags &= ~HandleFlags.Finished;
@@ -99,6 +104,7 @@ export class Navigation {
 
     let i = 0;
 
+    // Used to limit how long this algorithm may take
     const step = () => {
       if (i++ === MAX_ITERATIONS) {
         throw new IterationLimitReachedError();
@@ -276,59 +282,39 @@ export class Navigation {
 
   }
 
-  private setFocus(handle: Handle): void {
-    if (this.focus !== null) {
-      if (this.focus.left.indexOf(handle) !== -1) {
-        handle.lastFocusRight = this.focus;
-      } else if (this.focus.right.indexOf(handle) !== -1) {
-        handle.lastFocusLeft = this.focus;
-      } else if (this.focus.top.indexOf(handle) !== -1) {
-        handle.lastFocusBottom = this.focus;
-      } else if (this.focus.bottom.indexOf(handle) !== -1) {
-        handle.lastFocusTop = this.focus;
-      }
-    }
-    this.focus = handle;
+  public getRegions(): Iterable<RegionId> {
+    return this.handles.values();
   }
 
-  public focusTopLeft(): void {
-    let min = null;
-    let minX = Infinity;
-    let minY = Infinity;
-    for (const handle of this.getHandles()) {
-      if (handle.extended.left < minX || handle.extended.top < minY) {
-        min = handle;
-        minX = handle.extended.left;
-        minY = handle.extended.top;
-      }
-    }
-    if (min !== null) {
-      this.setFocus(min);
-    }
-  }
-
-  public navigate(direction: Direction): void {
-    if (this.focus === null) {
-      return;
-    }
+  public navigate(id: RegionId, direction: Direction): RegionId | undefined {
+    const handle = id as Handle;
     let newHandle;
     switch (direction) {
       case Direction.Up:
-        newHandle = this.focus.lastFocusTop ?? this.focus.focusTop;
+        newHandle = handle.lastFocusTop ?? handle.focusTop;
         break;
       case Direction.Down:
-        newHandle = this.focus.lastFocusBottom ?? this.focus.focusBottom;
+        newHandle = handle.lastFocusBottom ?? handle.focusBottom;
         break;
       case Direction.Left:
-        newHandle = this.focus.lastFocusLeft ?? this.focus.focusLeft;
+        newHandle = handle.lastFocusLeft ?? handle.focusLeft;
         break;
       case Direction.Right:
-        newHandle = this.focus.lastFocusRight ?? this.focus.focusRight;
+        newHandle = handle.lastFocusRight ?? handle.focusRight;
         break;
     }
     if (newHandle !== undefined) {
-      this.setFocus(newHandle);
+      if (handle.left.indexOf(newHandle) !== -1) {
+        newHandle.lastFocusRight = handle;
+      } else if (handle.right.indexOf(newHandle) !== -1) {
+        newHandle.lastFocusLeft = handle;
+      } else if (handle.top.indexOf(newHandle) !== -1) {
+        newHandle.lastFocusBottom = handle;
+      } else if (handle.bottom.indexOf(newHandle) !== -1) {
+        newHandle.lastFocusTop = handle;
+      }
     }
+    return newHandle;
   }
 
 }

@@ -1,6 +1,6 @@
 import "./style.css";
 
-import { Navigation, AABB, type Vec2, Direction } from "@samvv/nav";
+import { Navigation, AABB, RegionId, type Vec2, Direction } from "@samvv/nav";
 
 const nav = new Navigation(window.innerWidth, window.innerHeight);
 
@@ -12,9 +12,14 @@ document.body.appendChild(canvas);
 
 const ctx = canvas.getContext('2d')!;
 
-let boxes: { id: string; aabb: AABB; }[] = [];
+let boxes: RegionId[] = [];
 let start: Vec2 | null = null;
 const end = [0, 0];
+let focus: RegionId | null = null;
+
+function setFocus(newFocus: RegionId | null): void {
+  focus = newFocus;
+}
 
 window.addEventListener('mousedown', e => {
   start = [ e.pageX, e.pageY ];
@@ -34,12 +39,15 @@ window.addEventListener('mouseup', e => {
     return;
   }
   const end  = [ e.pageX, e.pageY ];
+  if (start[0] === end[0] || start[1] === end[1]) {
+    return;
+  }
   createBox(new AABB(
     [ Math.min(start[0], end[0]), Math.min(start[1], end[1]) ],
     [ Math.max(start[0], end[0]), Math.max(start[1], end[1]) ]
   ));
   start = null;
-  nav.layout();
+  nav.update();
   save();
   render();
 });
@@ -50,20 +58,27 @@ window.addEventListener('keydown', e => {
       clear();
       break;
     case 'ArrowLeft':
-      console.log('LEFT');
-      nav.navigate(Direction.Left);
+      if (focus !== null) {
+        setFocus(nav.navigate(focus, Direction.Left) ?? focus);
+      }
       render();
       break;
     case 'ArrowRight':
-      nav.navigate(Direction.Right);
+      if (focus !== null) {
+        setFocus(nav.navigate(focus, Direction.Right) ?? focus);
+      }
       render();
       break;
     case 'ArrowUp':
-      nav.navigate(Direction.Up);
+      if (focus !== null) {
+        setFocus(nav.navigate(focus, Direction.Up) ?? focus);
+      }
       render();
       break;
     case 'ArrowDown':
-      nav.navigate(Direction.Down);
+      if (focus !== null) {
+        setFocus(nav.navigate(focus, Direction.Down) ?? focus);
+      }
       render();
       break;
   }
@@ -71,18 +86,24 @@ window.addEventListener('keydown', e => {
 
 function createBox(aabb: AABB): void {
   const id = nav.add(aabb);
-  boxes.push({ id, aabb });
+  boxes.push(id);
+  if (focus === null) {
+    setFocus(id);
+  }
 }
 
 function clear() {
   boxes = [];
   save();
-  nav.layout();
+  nav.update();
   render();
 }
 
 function save() {
-  localStorage.setItem('boxes', JSON.stringify(boxes.map(b => [b.aabb.top, b.aabb.left, b.aabb.bottom, b.aabb.right])));
+  localStorage.setItem('boxes', JSON.stringify(boxes.map(b => {
+    const aabb = nav.getAABB(b);
+    return [aabb.top, aabb.left, aabb.bottom, aabb.right]
+  })));
 }
 
 function load() {
@@ -93,21 +114,21 @@ function load() {
   for (const [top, left, bottom, right] of JSON.parse(found)) {
     createBox(new AABB([ left, top ], [ right, bottom ]));
   }
-  nav.layout();
-  nav.focusTopLeft();
+  nav.update();
   render();
 }
 
 function render() {
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   for (const box of boxes) {
-    if (nav.focus?.id === box.id) {
+    if (focus === box) {
       ctx.fillStyle = 'green';
     } else {
       ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
     }
-    ctx.fillRect(box.aabb.left, box.aabb.top, box.aabb.width, box.aabb.height);
-    const outline = nav.getOutline(box.id);
+    const aabb = nav.getAABB(box);
+    ctx.fillRect(aabb.left, aabb.top, aabb.width, aabb.height);
+    const outline = nav.getExtendedOutline(box);
     ctx.strokeStyle = 'blue';
     ctx.strokeRect(outline.left, outline.top, outline.width, outline.height);
   }
