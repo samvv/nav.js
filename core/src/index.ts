@@ -14,14 +14,19 @@ export const enum Direction {
   Down,
 }
 
+const enum HandleFlags {
+  FinishedUp    = 1 << 1,
+  FinishedDown  = 1 << 2,
+  FinishedLeft  = 1 << 3,
+  FinishedRight = 1 << 4,
+  Finished = FinishedUp | FinishedDown | FinishedLeft | FinishedRight,
+}
+
 type Handle = {
   id: string;
   base: AABB;
   extended: AABB;
-  finishedUp: boolean;
-  finishedDown: boolean;
-  finishedLeft: boolean;
-  finishedRight: boolean;
+  flags: number;
 }
 
 class IterationLimitReachedError extends Error {
@@ -49,10 +54,7 @@ export class Navigation {
       id,
       base: region,
       extended: region.deepClone(),
-      finishedDown: false,
-      finishedUp: false,
-      finishedLeft: false,
-      finishedRight: false,
+      flags: 0,
     }
     this.handles.add(handle);
     this.handlesById.set(id, handle);
@@ -67,10 +69,7 @@ export class Navigation {
 
     for (const handle of this.getHandles()) {
       handle.extended = handle.base.deepClone();
-      handle.finishedUp = false;
-      handle.finishedDown = false;
-      handle.finishedLeft = false;
-      handle.finishedRight = false;
+      handle.flags &= ~HandleFlags.Finished;
     }
 
     const self = this;
@@ -106,44 +105,44 @@ export class Navigation {
             return !intersectLine(line)[Symbol.iterator]().next().done;
           }
 
-          if (!handle.finishedDown) {
+          if ((handle.flags & HandleFlags.FinishedDown) === 0) {
             handle.extended.bottom++;
             if (handle.extended.bottom >= this.height || isIntersectionLine([ handle.extended.bottomLeft, handle.extended.bottomRight ])) {
               handle.extended.bottom--;
-              handle.finishedDown = true;
+              handle.flags |= HandleFlags.FinishedDown;
             } else {
               step();
               handleChanged = true;
             }
           }
 
-          if (!handle.finishedUp) {
+          if ((handle.flags & HandleFlags.FinishedUp) === 0) {
             handle.extended.top--;
             if (handle.extended.top <= 0 || isIntersectionLine([ handle.extended.topLeft, handle.extended.topRight ])) {
               handle.extended.top++;
-              handle.finishedUp = true;
+              handle.flags |= HandleFlags.FinishedUp;
             } else {
               step();
               handleChanged = true;
             }
           }
 
-          if (!handle.finishedLeft) {
+          if ((handle.flags & HandleFlags.FinishedLeft) === 0) {
             handle.extended.left--;
             if (handle.extended.left <= 0 || isIntersectionLine([ handle.extended.topLeft, handle.extended.bottomLeft ])) {
               handle.extended.left++;
-              handle.finishedLeft = true;
+              handle.flags |= HandleFlags.FinishedLeft;
             } else {
               step();
               handleChanged = true;
             }
           }
 
-          if (!handle.finishedRight) {
+          if ((handle.flags & HandleFlags.FinishedRight) === 0) {
             handle.extended.right++;
             if (handle.extended.width >= this.width || isIntersectionLine([ handle.extended.topRight, handle.extended.bottomRight ])) {
               handle.extended.right--;
-              handle.finishedRight = true;
+              handle.flags |= HandleFlags.FinishedRight;
             } else {
               step();
               handleChanged = true;
