@@ -1,6 +1,8 @@
 {
   "workspaces": [
     "core",
-    "playground"
+    "react",
+    "playground",
+    "examples/react-demo"
   ]
 }

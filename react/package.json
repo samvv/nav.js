@@ -1,0 +1,29 @@
+{
+  "name": "@samvv/nav-react",
+  "version": "0.1.0",
+  "description": "React components that integrate with Nav",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "react",
+    "layout",
+    "navigation",
+    "focus",
+    "blur"
+  ],
+  "author": "Sam Vervaeck",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@samvv/nav": "^0.1.0",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  }
+}

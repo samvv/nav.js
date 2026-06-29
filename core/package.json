@@ -6,8 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [ "layout", "navigation", "focus", "blur" ],
+  "author": "Sam Vervaeck",
   "license": "MIT",
   "type": "module",
   "devDependencies": {

@@ -5,7 +5,7 @@ export { AABB, type Line } from "./shapes.js"
 
 const MAX_ITERATIONS = 50000;
 
-export const enum Direction {
+export enum Direction {
   Left,
   Right,
   Up,

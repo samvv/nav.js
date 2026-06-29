@@ -1,5 +1,4 @@
 
-import { which } from "bun";
 import { Vec2 } from "./math.js";
 import { unreachable } from "./util.js";
 
