@@ -5,6 +5,8 @@ import { AABB, isIntersectionLineAABB, Line } from "./shapes.js";
 export * from "./math.js";
 export { AABB, type Line } from "./shapes.js"
 
+const MAX_ITERATIONS = 50000;
+
 export const enum Direction {
   Left,
   Right,
@@ -25,7 +27,7 @@ type Handle = {
 class IterationLimitReachedError extends Error {
 }
 
-export class Navigation<T> {
+export class Navigation {
 
   private handles = new Set<Handle>();
   private handlesById = new Map<string, Handle>();
@@ -76,22 +78,21 @@ export class Navigation<T> {
     let i = 0;
 
     const step = () => {
-      if (i++ === 5000) {
+      if (i++ === MAX_ITERATIONS) {
         throw new IterationLimitReachedError();
       }
     }
 
-    // TODO use this
     let curr = [...this.getHandles()];
-    let next = new Set<Handle>();
+    let next = [];
 
     try {
 
       for (;;) {
 
-        let changed = false;
+        for (const handle of curr) {
 
-        for (const handle of this.getHandles()) {
+          let handleChanged = false;
 
           function *intersectLine(line: Line): Iterable<Handle> {
             for (const other of self.getHandles()) {
@@ -112,10 +113,10 @@ export class Navigation<T> {
               handle.finishedDown = true;
             } else {
               step();
-              changed = true;
+              handleChanged = true;
             }
           }
-123948
+
           if (!handle.finishedUp) {
             handle.extended.top--;
             if (handle.extended.top <= 0 || isIntersectionLine([ handle.extended.topLeft, handle.extended.topRight ])) {
@@ -123,7 +124,7 @@ export class Navigation<T> {
               handle.finishedUp = true;
             } else {
               step();
-              changed = true;
+              handleChanged = true;
             }
           }
 
@@ -134,7 +135,7 @@ export class Navigation<T> {
               handle.finishedLeft = true;
             } else {
               step();
-              changed = true;
+              handleChanged = true;
             }
           }
 
@@ -145,15 +146,21 @@ export class Navigation<T> {
               handle.finishedRight = true;
             } else {
               step();
-              changed = true;
+              handleChanged = true;
             }
+          }
+
+          if (handleChanged) {
+            next.push(handle);
           }
 
         }
 
-        if (!changed) {
+        if (next.length === 0) {
           break;
         }
+        curr = next;
+        next = [];
 
       }
 
