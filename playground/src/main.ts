@@ -50,16 +50,21 @@ window.addEventListener('keydown', e => {
       clear();
       break;
     case 'ArrowLeft':
+      console.log('LEFT');
       nav.navigate(Direction.Left);
+      render();
       break;
     case 'ArrowRight':
       nav.navigate(Direction.Right);
+      render();
       break;
     case 'ArrowUp':
       nav.navigate(Direction.Up);
+      render();
       break;
     case 'ArrowDown':
       nav.navigate(Direction.Down);
+      render();
       break;
   }
 });
@@ -89,13 +94,14 @@ function load() {
     createBox(new AABB([ left, top ], [ right, bottom ]));
   }
   nav.layout();
+  nav.focusTopLeft();
   render();
 }
 
 function render() {
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   for (const box of boxes) {
-    if (nav.focus === box) {
+    if (nav.focus?.id === box.id) {
       ctx.fillStyle = 'green';
     } else {
       ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';

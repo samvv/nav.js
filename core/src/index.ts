@@ -27,6 +27,19 @@ type Handle = {
   base: AABB;
   extended: AABB;
   flags: number;
+  left: Handle[];
+  right: Handle[];
+  top: Handle[];
+  bottom: Handle[];
+  focusBottom?: Handle;
+  focusTop?: Handle;
+  focusLeft?: Handle;
+  focusRight?: Handle;
+  // TODO implement the following
+  lastFocusLeft: number;
+  lastFocusRight: number;
+  lastFocusTop: number;
+  lastFocusBottom: number;
 }
 
 class IterationLimitReachedError extends Error {
@@ -36,6 +49,8 @@ export class Navigation {
 
   private handles = new Set<Handle>();
   private handlesById = new Map<string, Handle>();
+
+  public focus: Handle | null = null;
 
   public constructor(
     public width: number,
@@ -55,6 +70,10 @@ export class Navigation {
       base: region,
       extended: region.deepClone(),
       flags: 0,
+      left: [],
+      right: [],
+      top: [],
+      bottom: [],
     }
     this.handles.add(handle);
     this.handlesById.set(id, handle);
@@ -70,6 +89,10 @@ export class Navigation {
     for (const handle of this.getHandles()) {
       handle.extended = handle.base.deepClone();
       handle.flags &= ~HandleFlags.Finished;
+      handle.left = [];
+      handle.right = [];
+      handle.top = [];
+      handle.bottom = [];
     }
 
     const self = this;
@@ -93,7 +116,7 @@ export class Navigation {
 
           let handleChanged = false;
 
-          function *intersectLine(line: Line): Iterable<Handle> {
+          function *intersectHandlesLine(line: Line): Iterable<Handle> {
             for (const other of self.getHandles()) {
               if (other !== handle && isIntersectionLineAABB(line, other.extended)) {
                 yield other;
@@ -101,15 +124,16 @@ export class Navigation {
             }
           }
 
-          function isIntersectionLine(line: Line): boolean {
-            return !intersectLine(line)[Symbol.iterator]().next().done;
-          }
-
           if ((handle.flags & HandleFlags.FinishedDown) === 0) {
             handle.extended.bottom++;
-            if (handle.extended.bottom >= this.height || isIntersectionLine([ handle.extended.bottomLeft, handle.extended.bottomRight ])) {
+            const others = [...intersectHandlesLine([ handle.extended.bottomLeft, handle.extended.bottomRight ])];
+            if (handle.extended.bottom >= this.height || others.length > 0) {
               handle.extended.bottom--;
               handle.flags |= HandleFlags.FinishedDown;
+              for (const other of others) {
+                handle.bottom.push(other);
+                other.top.push(handle);
+              }
             } else {
               step();
               handleChanged = true;
@@ -118,9 +142,14 @@ export class Navigation {
 
           if ((handle.flags & HandleFlags.FinishedUp) === 0) {
             handle.extended.top--;
-            if (handle.extended.top <= 0 || isIntersectionLine([ handle.extended.topLeft, handle.extended.topRight ])) {
+            const others = [...intersectHandlesLine([ handle.extended.topLeft, handle.extended.topRight ])];
+            if (handle.extended.top <= 0 || others.length > 0) {
               handle.extended.top++;
               handle.flags |= HandleFlags.FinishedUp;
+              for (const other of others) {
+                handle.top.push(other);
+                other.bottom.push(handle);
+              }
             } else {
               step();
               handleChanged = true;
@@ -129,9 +158,15 @@ export class Navigation {
 
           if ((handle.flags & HandleFlags.FinishedLeft) === 0) {
             handle.extended.left--;
-            if (handle.extended.left <= 0 || isIntersectionLine([ handle.extended.topLeft, handle.extended.bottomLeft ])) {
+            const others = [...intersectHandlesLine([ handle.extended.topLeft, handle.extended.bottomLeft ])];
+            if (handle.extended.left <= 0 || others.length > 0) {
               handle.extended.left++;
+              handle.left.push();
               handle.flags |= HandleFlags.FinishedLeft;
+              for (const other of others) {
+                handle.left.push(other);
+                other.right.push(handle);
+              }
             } else {
               step();
               handleChanged = true;
@@ -140,9 +175,14 @@ export class Navigation {
 
           if ((handle.flags & HandleFlags.FinishedRight) === 0) {
             handle.extended.right++;
-            if (handle.extended.width >= this.width || isIntersectionLine([ handle.extended.topRight, handle.extended.bottomRight ])) {
+            const others = [...intersectHandlesLine([ handle.extended.topRight, handle.extended.bottomRight ])];
+            if (handle.extended.width >= this.width || others.length > 0) {
               handle.extended.right--;
               handle.flags |= HandleFlags.FinishedRight;
+              for (const other of others) {
+                handle.right.push(other);
+                other.left.push(handle);
+              }
             } else {
               step();
               handleChanged = true;
@@ -171,10 +211,113 @@ export class Navigation {
       throw error;
     }
 
+    for (const handle of this.getHandles()) {
+      if (handle.bottom.length > 0) {
+        const candidates: Array<[number, Handle]> = [];
+        for (const other of handle.bottom) {
+          const min = other.extended.left < handle.extended.left
+            ? handle.extended.left
+            : other.extended.left;
+          const max = other.extended.right > handle.extended.right
+            ? handle.extended.right
+            : other.extended.right;
+          const d = max - min;
+          candidates.push([ d, other ]);
+        }
+        candidates.sort((a, b) => b[0] - a[0]);
+        handle.focusBottom = candidates[0]![1];
+      }
+      if (handle.top.length > 0) {
+        const candidates: Array<[number, Handle]> = [];
+        for (const other of handle.top) {
+          const min = other.extended.left < handle.extended.left
+            ? handle.extended.left
+            : other.extended.left;
+          const max = other.extended.right > handle.extended.right
+            ? handle.extended.right
+            : other.extended.right;
+          const d = max - min;
+          candidates.push([ d, other ]);
+        }
+        candidates.sort((a, b) => b[0] - a[0]);
+        handle.focusTop = candidates[0]![1];
+      }
+      if (handle.left.length > 0) {
+        const candidates: Array<[number, Handle]> = [];
+        for (const other of handle.left) {
+          const min = other.extended.top < handle.extended.top
+            ? handle.extended.top
+            : other.extended.top;
+          const max = other.extended.bottom > handle.extended.bottom
+            ? handle.extended.bottom
+            : other.extended.bottom;
+          const d = max - min;
+          candidates.push([ d, other ]);
+        }
+        candidates.sort((a, b) => b[0] - a[0]);
+        handle.focusLeft = candidates[0]![1];
+      }
+      if (handle.right.length > 0) {
+        const candidates: Array<[number, Handle]> = [];
+        for (const other of handle.right) {
+          const min = other.extended.top < handle.extended.top
+            ? handle.extended.top
+            : other.extended.top;
+          const max = other.extended.bottom > handle.extended.bottom
+            ? handle.extended.bottom
+            : other.extended.bottom;
+          const d = max - min;
+          candidates.push([ d, other ]);
+        }
+        candidates.sort((a, b) => b[0] - a[0]);
+        handle.focusRight = candidates[0]![1];
+      }
+    }
+
+  }
+
+  private setFocus(handle: Handle): void {
+    this.focus = handle;
+  }
+
+  public focusTopLeft(): void {
+    let min = null;
+    let minX = Infinity;
+    let minY = Infinity;
+    for (const handle of this.getHandles()) {
+      if (handle.extended.left < minX || handle.extended.top < minY) {
+        min = handle;
+        minX = handle.extended.left;
+        minY = handle.extended.top;
+      }
+    }
+    if (min !== null) {
+      this.setFocus(min);
+    }
   }
 
   public navigate(direction: Direction): void {
-    // TODO
+    if (this.focus === null) {
+      return;
+    }
+    let newHandle;
+    switch (direction) {
+      case Direction.Up:
+        newHandle = this.focus.focusTop;
+        break;
+      case Direction.Down:
+        newHandle = this.focus.focusBottom;
+        break;
+      case Direction.Left:
+        newHandle = this.focus.focusLeft;
+        break;
+      case Direction.Right:
+        newHandle = this.focus.focusRight;
+        break;
+    }
+    if (newHandle !== undefined) {
+      this.setFocus(newHandle);
+    }
   }
 
 }
