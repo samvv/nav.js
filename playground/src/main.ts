@@ -93,9 +93,13 @@ function createBox(aabb: AABB): void {
 }
 
 function clear() {
+  for (const box of boxes) {
+    nav.remove(box);
+  }
   boxes = [];
-  save();
   nav.update();
+  setFocus(null);
+  save();
   render();
 }
 
