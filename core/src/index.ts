@@ -36,10 +36,10 @@ type Handle = {
   focusTop?: Handle;
   focusLeft?: Handle;
   focusRight?: Handle;
-  lastFocusLeft: Handle;
-  lastFocusRight: Handle;
-  lastFocusTop: Handle;
-  lastFocusBottom: Handle;
+  lastFocusLeft?: Handle;
+  lastFocusRight?: Handle;
+  lastFocusTop?: Handle;
+  lastFocusBottom?: Handle;
 }
 
 class IterationLimitReachedError extends Error {
