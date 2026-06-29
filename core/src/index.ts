@@ -1,6 +1,7 @@
 import { v4 as uuid4 } from "uuid";
 
 import { AABB, isIntersectionLineAABB, Line } from "./shapes.js";
+import { which } from "bun";
 
 export * from "./math.js";
 export { AABB, type Line } from "./shapes.js"
@@ -35,11 +36,10 @@ type Handle = {
   focusTop?: Handle;
   focusLeft?: Handle;
   focusRight?: Handle;
-  // TODO implement the following
-  lastFocusLeft: number;
-  lastFocusRight: number;
-  lastFocusTop: number;
-  lastFocusBottom: number;
+  lastFocusLeft: Handle;
+  lastFocusRight: Handle;
+  lastFocusTop: Handle;
+  lastFocusBottom: Handle;
 }
 
 class IterationLimitReachedError extends Error {
@@ -277,6 +277,17 @@ export class Navigation {
   }
 
   private setFocus(handle: Handle): void {
+    if (this.focus !== null) {
+      if (this.focus.left.indexOf(handle) !== -1) {
+        handle.lastFocusRight = this.focus;
+      } else if (this.focus.right.indexOf(handle) !== -1) {
+        handle.lastFocusLeft = this.focus;
+      } else if (this.focus.top.indexOf(handle) !== -1) {
+        handle.lastFocusBottom = this.focus;
+      } else if (this.focus.bottom.indexOf(handle) !== -1) {
+        handle.lastFocusTop = this.focus;
+      }
+    }
     this.focus = handle;
   }
 
@@ -303,16 +314,16 @@ export class Navigation {
     let newHandle;
     switch (direction) {
       case Direction.Up:
-        newHandle = this.focus.focusTop;
+        newHandle = this.focus.lastFocusTop ?? this.focus.focusTop;
         break;
       case Direction.Down:
-        newHandle = this.focus.focusBottom;
+        newHandle = this.focus.lastFocusBottom ?? this.focus.focusBottom;
         break;
       case Direction.Left:
-        newHandle = this.focus.focusLeft;
+        newHandle = this.focus.lastFocusLeft ?? this.focus.focusLeft;
         break;
       case Direction.Right:
-        newHandle = this.focus.focusRight;
+        newHandle = this.focus.lastFocusRight ?? this.focus.focusRight;
         break;
     }
     if (newHandle !== undefined) {
