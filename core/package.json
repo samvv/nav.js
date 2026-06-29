@@ -1,0 +1,19 @@
+{
+  "name": "@samvv/nav",
+  "version": "0.1.0",
+  "description": "Automatic navigation between rectangles in a 2D space",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "uuid": "^14.0.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14"
+  }
+}
