@@ -2,6 +2,71 @@
 import { Vec2 } from "./math.js";
 import { unreachable } from "./util.js";
 
+export enum Direction {
+  Left,
+  Right,
+  Up,
+  Down,
+}
+
+export enum Axis {
+  X,
+  Y,
+}
+
+export const ALL_DIRECTIONS = [ Direction.Left, Direction.Right, Direction.Up, Direction.Down ];
+
+export function invertAxis(axis: Axis): Axis {
+  switch (axis) {
+    case Axis.X:
+      return Axis.Y;
+    case Axis.Y:
+      return Axis.X;
+  }
+}
+
+export function getAxis(direction: Direction): Axis {
+  switch (direction) {
+    case Direction.Left:
+    case Direction.Right:
+      return Axis.X;
+    case Direction.Up:
+    case Direction.Down:
+      return Axis.Y;
+  }
+}
+
+export function axisToBeginDirection(axis: Axis): Direction {
+  switch (axis) {
+    case Axis.X:
+      return Direction.Left;
+    case Axis.Y:
+      return Direction.Up;
+  }
+}
+
+export function axisToEndDirection(axis: Axis): Direction {
+  switch (axis) {
+    case Axis.X:
+      return Direction.Right;
+    case Axis.Y:
+      return Direction.Down;
+  }
+}
+
+export function invertDirection(direction: Direction): Direction {
+  switch (direction) {
+    case Direction.Left:
+      return Direction.Right;
+    case Direction.Right:
+      return Direction.Left;
+    case Direction.Up:
+      return Direction.Down;
+    case Direction.Down:
+      return Direction.Up;
+  }
+}
+
 export type Line = [start: Vec2, end: Vec2];
 
 export class AABB {
@@ -35,6 +100,19 @@ export class AABB {
 
   public get bottom(): number {
     return this.bottomRight[1];
+  }
+
+  public get(direction: Direction): number {
+    switch (direction) {
+      case Direction.Left:
+        return this.left;
+      case Direction.Right:
+        return this.right;
+      case Direction.Up:
+        return this.top;
+      case Direction.Down:
+        return this.bottom;
+    }
   }
 
   public set left(newLeft: number) {
@@ -73,13 +151,53 @@ export class AABB {
     return [ (this.left + this.right) / 2, (this.top + this.bottom) / 2 ]
   }
 
-  public getLines(): Line[] {
-    return [
-      [ this.topLeft, this.topRight ],
-      [ this.topRight, this.bottomRight ],
-      [ this.bottomRight, this.bottomLeft ],
-      [ this.bottomLeft, this.topLeft ],
-    ];
+  public getLine(direction: Direction): Line {
+    switch (direction) {
+      case Direction.Left:
+        return [ this.topLeft, this.bottomLeft ];
+      case Direction.Right:
+        return [ this.topRight, this.bottomRight ];
+      case Direction.Up:
+        return [ this.topLeft, this.topRight ];
+      case Direction.Down:
+        return [ this.bottomLeft, this.bottomRight ];
+    }
+  }
+
+  /**
+   * Grow this AABB in the given direction with a fixed size.
+   */
+  public extend(direction: Direction, n: number): void {
+    switch (direction) {
+      case Direction.Up:
+        this.top -= n;
+        break;
+      case Direction.Right:
+        this.right += n;
+        break;
+      case Direction.Left:
+        this.left -= n;
+        break;
+      case Direction.Down:
+        this.bottom += n;
+        break;
+    }
+  }
+
+  /**
+   * Check whether this AABB overflows the given AABB in one particular direction.
+   */
+  public exceeds(outer: AABB, direction: Direction) {
+    switch (direction) {
+      case Direction.Left:
+        return this.left <= outer.left;
+      case Direction.Right:
+        return this.right >= outer.right;
+      case Direction.Up:
+        return this.top <= outer.top;
+      case Direction.Down:
+        return this.bottom >= outer.bottom;
+    }
   }
 
 }
