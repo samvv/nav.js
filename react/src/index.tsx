@@ -1,6 +1,6 @@
 import { AABB, Direction, Navigation, type RegionId } from "@samvv/nav";
-import { createContext, useCallback, useContext, useEffect, useId, useRef } from "react";
-import { debounceTime, Subject, Subscription, throttleTime } from "rxjs";
+import { createContext, useContext, useEffect, useId, useRef } from "react";
+import { debounceTime, Subject, Subscription } from "rxjs";
 
 // TODO throttle layout updates
 // TODO register window resize events
