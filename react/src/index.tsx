@@ -1,85 +1,134 @@
 import { AABB, Direction, Navigation, type RegionId } from "@samvv/nav";
-import { createContext, useContext, useEffect, useId, useRef } from "react";
-import { Subject, Subscription } from "rxjs";
+import { createContext, useCallback, useContext, useEffect, useId, useRef } from "react";
+import { debounceTime, Subject, Subscription, throttleTime } from "rxjs";
 
 // TODO throttle layout updates
 // TODO register window resize events
+// TODO copy data from old manager to new manager
 
 export type OnFocusFn = () => void;
 export type OnBlurFn = () => void;
 
-export type FocusableProps = {
-  onFocus?: OnFocusFn;
-  onBlur?: OnBlurFn;
-  defaultFocused?: boolean;
-  children: React.ReactNode;
+export type Mode = number | string
+
+const DEFAULT_MODE: Mode = 0;
+const UPDATE_THROTTLE_MSEC = 200;
+
+type Element = {
+  id: string;
+  mode: Mode;
+  region: RegionId;
+  onFocus?: OnFocusFn | undefined;
+  onBlur?: OnBlurFn | undefined;
 }
 
-type Element = { id: string, region: RegionId, onFocus?: OnFocusFn | undefined; onBlur?: OnBlurFn | undefined; }
+class DOMNavigation extends Navigation {
+
+  private updates = new Subject<void>();
+
+  public constructor() {
+    super(window.innerWidth, window.innerHeight);
+    this.updates.pipe(debounceTime(UPDATE_THROTTLE_MSEC)).subscribe(() => {
+      super.update();
+    });
+  }
+
+  public override update(): void {
+    this.updates.next();
+  }
+
+}
+
+type ModeInfo = {
+  /**
+   * A React ID pointing to the component that needs to be focused, or null if there is no focus.
+   */
+  focus: string | null;
+  nav: Navigation;
+};
 
 export class Manager {
 
   private subscription: Subscription;
-  private focus: string | null = null;
   private elementsByReactId = new Map<string, Element>();
   private elementsByRegionId = new Map<RegionId, Element>();
-  public nav = new Navigation(
-    window.innerWidth,
-    window.innerHeight
-  );
+  private modeMap = new Map<Mode, ModeInfo>();
 
   public constructor(
-    private device: Device
+    private device: Device,
+    private mode = DEFAULT_MODE
   ) {
     console.log('construct');
     this.subscription = device.move.subscribe(dir => this.navigate(dir));
   }
 
-  public register(id: string, node: HTMLElement, onFocus: OnFocusFn | undefined, onBlur: OnBlurFn | undefined): void {
+  private get focus(): string | null {
+    return this.getModeInfo(this.mode).focus;
+  }
+
+  private getModeInfo(mode: Mode): ModeInfo {
+    let data = this.modeMap.get(mode);
+    if (data === undefined) {
+      data = { focus: null, nav: new DOMNavigation() };
+      this.modeMap.set(mode, data);
+    }
+    return data;
+  }
+
+  private getNav(mode: Mode): Navigation {
+    return this.getModeInfo(mode).nav;
+  }
+
+  public register(id: string, mode: Mode, node: HTMLElement, onFocus: OnFocusFn | undefined, onBlur: OnBlurFn | undefined): void {
     console.log('register', id)
     const existing = this.elementsByReactId.get(id);
     if (existing !== undefined) {
       console.log('update', id);
+      if (existing.mode !== mode) {
+        const nav1 = this.getNav(existing.mode);
+        nav1.remove(existing.region);
+        nav1.update();
+        existing.mode = mode;
+        const nav2 = this.getNav(mode);
+        nav2.add(existing.region.base);
+        nav2.update();
+      }
       existing.onFocus = onFocus;
       existing.onBlur = onBlur;
       return;
     }
+    const nav = this.getNav(mode);
     const rect = node.getBoundingClientRect();
     const aabb = new AABB([ rect.left, rect.top ], [ rect.right, rect.bottom ]);
-    const region = this.nav.add(aabb);
-    const element: Element = { id, region, onBlur, onFocus };
+    const region = nav.add(aabb);
+    const element: Element = { id, mode, region, onBlur, onFocus };
     this.elementsByRegionId.set(region, element);
     this.elementsByReactId.set(id, element);
-    this.update();
-  }
-
-  private update() {
-    // TODO throttle me
-    this.nav.update();
+    nav.update();
   }
 
   public unregister(id: string): void {
     console.log('unregister', id)
     const element = this.elementsByReactId.get(id);
     if (element !== undefined) {
-      this.nav.remove(element.region);
+      const nav = this.getNav(element.mode);
+      nav.remove(element.region);
       this.elementsByRegionId.delete(element.region);
       this.elementsByReactId.delete(id);
-      this.update();
+      nav.update();
     }
   }
 
-  public setFocus(newFocus: string): void {
+  public setFocus(newMode: Mode, newFocus: string | null): void {
     if (this.focus !== null) {
       const element = this.elementsByReactId.get(this.focus);
-      if (element !== undefined && element.onBlur !== undefined) {
-        element.onBlur();
-      }
+      element?.onBlur?.();
     }
-    this.focus = newFocus;
-    const element = this.elementsByReactId.get(this.focus);
-    if (element !== undefined && element.onFocus !== undefined) {
-      element.onFocus();
+    this.mode = newMode;
+    this.getModeInfo(newMode).focus = newFocus;
+    if (newFocus !== null) {
+      const element = this.elementsByReactId.get(newFocus);
+      element?.onFocus?.();
     }
   }
 
@@ -89,13 +138,25 @@ export class Manager {
     }
     const element = this.elementsByReactId.get(this.focus);
     if (element === undefined) {
-      console.warn(`Navigation region for React component ID ${this.focus} not found.`);
+      console.warn(`Navigation element for React component ID ${this.focus} not found.`);
       return;
     }
-    const newElement = this.elementsByRegionId.get(this.nav.navigate(element.region, direction) ?? element.region);
+    const nav = this.getNav(element.mode);
+    const newElement = this.elementsByRegionId.get(nav.navigate(element.region, direction) ?? element.region);
     if (newElement !== undefined) {
-      this.setFocus(newElement.id);
+      this.setFocus(this.mode, newElement.id);
     }
+  }
+
+  public getMode(): Mode {
+    return this.mode;
+  }
+
+  public setMode(newMode: Mode): void {
+    if (newMode === this.mode) {
+      return;
+    }
+    this.setFocus(newMode, this.getModeInfo(newMode).focus);
   }
 
   public close(): void {
@@ -139,18 +200,13 @@ export function keyboard(): Device {
 }
 
 export type NavigationProviderProps = {
-  device: Device;
+  manager: Manager;
   children: React.ReactNode;
 }
 
-export function NavigationProvider({ device, children }: NavigationProviderProps) {
-  // FIXME manager will not be re-created on change
-  const managerRef = useRef<Manager>(null);
-  if (managerRef.current === null) {
-    managerRef.current = new Manager(device);
-  }
+export function NavigationProvider({ manager, children }: NavigationProviderProps) {
   return (
-    <Ctx.Provider value={managerRef.current}>
+    <Ctx.Provider value={manager}>
       {children}
     </Ctx.Provider>
   );
@@ -164,20 +220,33 @@ function useManager() {
   return nav;
 }
 
+export type FocusableProps = {
+  onFocus?: OnFocusFn;
+  onBlur?: OnBlurFn;
+  mode?: Mode;
+  defaultFocused?: boolean;
+  children: React.ReactNode;
+}
+
 export function Focusable({
   onFocus,
   onBlur,
   defaultFocused,
+  mode = 0,
   ...props
 }: FocusableProps) {
   const id = useId();
   const didDefaultFocus = useRef(false);
   const elementRef = useRef<HTMLDivElement>(null);
   const manager = useManager();
+  const callbacksRef = useRef({ onFocus, onBlur });
+  callbacksRef.current = { onFocus, onBlur };
   useEffect(() => {
     const element = elementRef.current;
     if (element !== null) {
-      manager.register(id, element, onFocus, onBlur);
+      const stableFocus = () => callbacksRef.current.onFocus?.();
+      const stableBlur = () => callbacksRef.current.onBlur?.();
+      manager.register(id, mode, element, stableFocus, stableBlur);
       return () => {
         manager.unregister(id);
       }
@@ -188,7 +257,7 @@ export function Focusable({
       return;
     }
     if (defaultFocused) {
-      manager.setFocus(id);
+      manager.setFocus(mode, id);
       didDefaultFocus.current = true;
     }
   }, [ manager, defaultFocused ]);
