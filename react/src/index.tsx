@@ -220,6 +220,25 @@ function useManager() {
   return nav;
 }
 
+export type FocusGroupProps = {
+  mode: Mode;
+  children: React.ReactNode;
+}
+
+const FocusGroupContext = createContext<Mode>(DEFAULT_MODE);
+
+export function FocusGroup({ mode, children }: FocusGroupProps) {
+  return (
+    <FocusGroupContext.Provider value={mode}>
+      {children}
+    </FocusGroupContext.Provider>
+  );
+}
+
+function useNearestFocusGroupMode(): Mode {
+  return useContext(FocusGroupContext);
+}
+
 export type FocusableProps = {
   onFocus?: OnFocusFn;
   onBlur?: OnBlurFn;
@@ -232,12 +251,14 @@ export function Focusable({
   onFocus,
   onBlur,
   defaultFocused,
-  mode = 0,
+  mode: modeOverride,
   ...props
 }: FocusableProps) {
   const id = useId();
   const didDefaultFocus = useRef(false);
   const elementRef = useRef<HTMLDivElement>(null);
+  const groupMode = useNearestFocusGroupMode();
+  const mode = modeOverride ?? groupMode;
   const manager = useManager();
   const callbacksRef = useRef({ onFocus, onBlur });
   callbacksRef.current = { onFocus, onBlur };
