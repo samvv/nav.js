@@ -12,6 +12,21 @@ export enum Direction {
   Down,
 }
 
+const ALL_DIRECTIONS = [ Direction.Left, Direction.Right, Direction.Up, Direction.Down ];
+
+function invertDirection(direction: Direction): Direction {
+  switch (direction) {
+    case Direction.Left:
+      return Direction.Right;
+    case Direction.Right:
+      return Direction.Left;
+    case Direction.Up:
+      return Direction.Down;
+    case Direction.Down:
+      return Direction.Up;
+  }
+}
+
 const enum HandleFlags {
   FinishedUp    = 1 << 1,
   FinishedDown  = 1 << 2,
@@ -30,14 +45,79 @@ type Handle = {
   right: Handle[];
   top: Handle[];
   bottom: Handle[];
-  focusBottom?: Handle;
-  focusTop?: Handle;
-  focusLeft?: Handle;
-  focusRight?: Handle;
-  lastFocusLeft?: Handle;
-  lastFocusRight?: Handle;
-  lastFocusTop?: Handle;
-  lastFocusBottom?: Handle;
+  defaultFocusBottom?: Handle;
+  defaultFocusTop?: Handle;
+  defaultFocusLeft?: Handle;
+  defaultFocusRight?: Handle;
+  lastFocusLeft?: Handle | undefined;
+  lastFocusRight?: Handle | undefined;
+  lastFocusTop?: Handle | undefined;
+  lastFocusBottom?: Handle | undefined;
+}
+
+function getLastFocus(handle: Handle, direction: Direction): Handle | undefined {
+  switch (direction) {
+    case Direction.Up:
+      return handle.lastFocusTop;
+    case Direction.Down:
+      return handle.lastFocusBottom;
+    case Direction.Left:
+      return handle.lastFocusLeft;
+    case Direction.Right:
+      return handle.lastFocusRight;
+  }
+}
+
+function setLastFocus(handle: Handle, direction: Direction, newHandle: Handle | undefined): void {
+  switch (direction) {
+    case Direction.Up:
+      handle.lastFocusTop = newHandle;
+    case Direction.Down:
+      handle.lastFocusBottom = newHandle;
+    case Direction.Left:
+      handle.lastFocusLeft = newHandle;
+    case Direction.Right:
+      handle.lastFocusRight = newHandle;
+  }
+}
+
+function getDefaultFocus(handle: Handle, direction: Direction): Handle | undefined {
+  switch (direction) {
+    case Direction.Up:
+      return handle.lastFocusTop;
+    case Direction.Down:
+      return handle.lastFocusBottom;
+    case Direction.Left:
+      return handle.lastFocusLeft;
+    case Direction.Right:
+      return handle.lastFocusRight;
+  }
+}
+
+function setDefaultFocus(handle: Handle, direction: Direction, newHandle: Handle | undefined): void {
+  switch (direction) {
+    case Direction.Up:
+      handle.lastFocusTop = newHandle;
+    case Direction.Down:
+      handle.lastFocusBottom = newHandle;
+    case Direction.Left:
+      handle.lastFocusLeft = newHandle;
+    case Direction.Right:
+      handle.lastFocusRight = newHandle;
+  }
+}
+
+function getNeighbours(handle: Handle, direction: Direction): Handle[] {
+  switch (direction) {
+    case Direction.Left:
+      return handle.left;
+    case Direction.Right:
+      return handle.right;
+    case Direction.Up:
+      return handle.top;
+    case Direction.Down:
+      return handle.bottom;
+  }
 }
 
 class IterationLimitReachedError extends Error {
@@ -77,8 +157,46 @@ export class Navigation {
   }
 
   public remove(id: RegionId): void {
-    this.handles.delete(id as Handle);
-    // TODO reset lastFocusLeft etc of neighbours?
+    const handle = id as Handle;
+
+    for (const direction of ALL_DIRECTIONS) {
+      const neighbours = getNeighbours(handle, direction);
+
+      for (const neighbour of neighbours) {
+
+        // Remove handle from the neighbours' neighbours
+        const neighbours2 = getNeighbours(neighbour, invertDirection(direction))
+        for (let i = 0; i < neighbours.length;) {
+          if (neighbours2[i] === handle) {
+            neighbours2.splice(i, 1);
+            continue;
+          }
+          i++;
+        }
+
+        // Reset the last focus if it points to handle
+        for (const direction2 of ALL_DIRECTIONS) {
+          const inverted = invertDirection(direction2);
+          const last = getLastFocus(neighbour, inverted);
+          if (last === handle) {
+            setLastFocus(last, inverted, undefined);
+          }
+        }
+
+        // Reset the default focus point if it points to handle
+        for (const direction2 of ALL_DIRECTIONS) {
+          const inverted = invertDirection(direction2);
+          const last = getDefaultFocus(neighbour, inverted);
+          if (last === handle) {
+            setDefaultFocus(last, inverted, undefined);
+          }
+        }
+
+      }
+
+    }
+
+    this.handles.delete(handle);
   }
 
   /**
@@ -231,7 +349,7 @@ export class Navigation {
           candidates.push([ d, other ]);
         }
         candidates.sort((a, b) => b[0] - a[0]);
-        handle.focusBottom = candidates[0]![1];
+        handle.defaultFocusBottom = candidates[0]![1];
       }
       if (handle.top.length > 0) {
         const candidates: Array<[number, Handle]> = [];
@@ -246,7 +364,7 @@ export class Navigation {
           candidates.push([ d, other ]);
         }
         candidates.sort((a, b) => b[0] - a[0]);
-        handle.focusTop = candidates[0]![1];
+        handle.defaultFocusTop = candidates[0]![1];
       }
       if (handle.left.length > 0) {
         const candidates: Array<[number, Handle]> = [];
@@ -261,7 +379,7 @@ export class Navigation {
           candidates.push([ d, other ]);
         }
         candidates.sort((a, b) => b[0] - a[0]);
-        handle.focusLeft = candidates[0]![1];
+        handle.defaultFocusLeft = candidates[0]![1];
       }
       if (handle.right.length > 0) {
         const candidates: Array<[number, Handle]> = [];
@@ -276,7 +394,7 @@ export class Navigation {
           candidates.push([ d, other ]);
         }
         candidates.sort((a, b) => b[0] - a[0]);
-        handle.focusRight = candidates[0]![1];
+        handle.defaultFocusRight = candidates[0]![1];
       }
     }
 
@@ -291,16 +409,16 @@ export class Navigation {
     let newHandle;
     switch (direction) {
       case Direction.Up:
-        newHandle = handle.lastFocusTop ?? handle.focusTop;
+        newHandle = handle.lastFocusTop ?? handle.defaultFocusTop;
         break;
       case Direction.Down:
-        newHandle = handle.lastFocusBottom ?? handle.focusBottom;
+        newHandle = handle.lastFocusBottom ?? handle.defaultFocusBottom;
         break;
       case Direction.Left:
-        newHandle = handle.lastFocusLeft ?? handle.focusLeft;
+        newHandle = handle.lastFocusLeft ?? handle.defaultFocusLeft;
         break;
       case Direction.Right:
-        newHandle = handle.lastFocusRight ?? handle.focusRight;
+        newHandle = handle.lastFocusRight ?? handle.defaultFocusRight;
         break;
     }
     if (newHandle !== undefined) {
