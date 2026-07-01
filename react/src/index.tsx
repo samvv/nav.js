@@ -274,13 +274,11 @@ export function Focusable({
     }
   }, [ manager, elementRef.current ]);
   useEffect(() => {
-    if (didDefaultFocus.current) {
+    if (!defaultFocused || didDefaultFocus.current) {
       return;
     }
-    if (defaultFocused) {
-      manager.setFocus(mode, id);
-      didDefaultFocus.current = true;
-    }
+    manager.setFocus(mode, id);
+    didDefaultFocus.current = true;
   }, [ manager, defaultFocused ]);
   return (
     <div ref={elementRef} {...props} />
