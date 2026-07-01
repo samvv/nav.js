@@ -277,7 +277,9 @@ export function useFocusable<T extends HTMLElement>({
 
   const manager = useManager();
 
-  // Avoid depending on `onFocus` and `onBlur` in the useEffect below
+  // Avoid depending on some changing variables in the useEffect below
+  const clickableRef = useRef(clickable);
+  clickableRef.current = clickable;
   const callbacksRef = useRef({ onFocus, onBlur });
   callbacksRef.current = { onFocus, onBlur };
 
@@ -292,28 +294,20 @@ export function useFocusable<T extends HTMLElement>({
         setFocused(false);
         callbacksRef.current.onBlur?.();
       }
+      const clickHandler = () => {
+        if (!clickableRef.current) {
+          return;
+        }
+        manager.setFocus(mode, id);
+      }
+      element.addEventListener('click', clickHandler);
       manager.register(id, mode, element, stableFocus, stableBlur);
       return () => {
+        element.removeEventListener('click', clickHandler);
         manager.unregister(id);
       }
     }
   }, [ manager, resolvedRef.current ]);
-
-  useEffect(() => {
-    const element = resolvedRef.current;
-      if (element) {
-        const handler = () => {
-          if (!clickable) {
-            return;
-          }
-          manager.setFocus(mode, id);
-        }
-        element.addEventListener('click', handler);
-        return () => {
-          element.removeEventListener('click', handler);
-        }
-    }
-  }, [ resolvedRef.current ]);
 
   useEffect(() => {
     if (!defaultFocused || didDefaultFocus.current) {
