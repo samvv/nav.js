@@ -1,5 +1,5 @@
 import { AABB, Direction, Navigation, type RegionId } from "@samvv/nav";
-import { createContext, useContext, useEffect, useId, useRef } from "react";
+import { createContext, useState, useContext, useEffect, useId, useRef } from "react";
 import { debounceTime, Subject, Subscription } from "rxjs";
 
 // TODO throttle layout updates
@@ -239,40 +239,82 @@ function useNearestFocusGroupMode(): Mode {
   return useContext(FocusGroupContext);
 }
 
-export type FocusableProps = {
+export type UseFocusableOptions<T extends HTMLElement> = {
+  ref?: React.RefObject<T | null>;
   onFocus?: OnFocusFn;
   onBlur?: OnBlurFn;
   mode?: Mode;
+  clickable?: boolean;
   defaultFocused?: boolean;
-  children: React.ReactNode;
 }
 
-export function Focusable({
+export type UseFocusableResult<T extends HTMLElement> = {
+  ref: React.RefObject<T | null>;
+  focused: boolean;
+}
+
+export function useFocusable<T extends HTMLElement>({
   onFocus,
   onBlur,
+  ref: userRef,
+  clickable = true,
   defaultFocused,
   mode: modeOverride,
-  ...props
-}: FocusableProps) {
+}: UseFocusableOptions<T>): UseFocusableResult<T> {
+
+  // The ID that will be used to focus this element
   const id = useId();
+
+  const [focused, setFocused] = useState(false);
+
   const didDefaultFocus = useRef(false);
-  const elementRef = useRef<HTMLDivElement>(null);
+
+  const internalRef = useRef<T>(null);
+  const resolvedRef = userRef || internalRef;
+
   const groupMode = useNearestFocusGroupMode();
   const mode = modeOverride ?? groupMode;
+
   const manager = useManager();
+
+  // Avoid depending on `onFocus` and `onBlur` in the useEffect below
   const callbacksRef = useRef({ onFocus, onBlur });
   callbacksRef.current = { onFocus, onBlur };
+
   useEffect(() => {
-    const element = elementRef.current;
+    const element = resolvedRef.current;
     if (element !== null) {
-      const stableFocus = () => callbacksRef.current.onFocus?.();
-      const stableBlur = () => callbacksRef.current.onBlur?.();
+      const stableFocus = () => {
+        setFocused(true);
+        callbacksRef.current.onFocus?.();
+      }
+      const stableBlur = () => {
+        setFocused(false);
+        callbacksRef.current.onBlur?.();
+      }
       manager.register(id, mode, element, stableFocus, stableBlur);
       return () => {
         manager.unregister(id);
       }
     }
-  }, [ manager, elementRef.current ]);
+  }, [ manager, resolvedRef.current ]);
+
+  useEffect(() => {
+    const element = resolvedRef.current;
+      if (element) {
+        const handler = () => {
+          if (!clickable) {
+            return;
+          }
+          manager.setFocus(mode, id);
+        }
+        element.addEventListener('click', handler);
+        return () => {
+          element.removeEventListener('click', handler);
+        }
+    }
+  }, [ resolvedRef.current ]);
+
   useEffect(() => {
     if (!defaultFocused || didDefaultFocus.current) {
       return;
@@ -280,7 +322,9 @@ export function Focusable({
     manager.setFocus(mode, id);
     didDefaultFocus.current = true;
   }, [ manager, defaultFocused ]);
-  return (
-    <div ref={elementRef} {...props} />
-  );
+
+  return {
+    ref: resolvedRef,
+    focused,
+  };
 }
